@@ -5,22 +5,18 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract Flutter project
+      - name: Extract project
         run: |
-          mkdir -p project
-          unzip -q terebar_online_complete_flutter.zip -d project
-
-      - name: Find Flutter project
-        run: |
-          PROJECT_DIR=$(find project -name pubspec.yaml -printf '%h\n' | head -n 1)
+          unzip -q terebar_online_complete_flutter.zip
+          PROJECT_DIR=$(find . -name pubspec.yaml -not -path './.github/*' -printf '%h\n' | head -n 1)
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
-          echo "Flutter project: $PROJECT_DIR"
+          echo "Project: $PROJECT_DIR"
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -29,16 +25,28 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Create fresh Flutter project
+        run: |
+          flutter create --platforms=android fresh_app
+
+      - name: Copy app files
+        run: |
+          cp -r "$PROJECT_DIR/lib" fresh_app/
+          cp "$PROJECT_DIR/pubspec.yaml" fresh_app/
+          if [ -d "$PROJECT_DIR/assets" ]; then
+            cp -r "$PROJECT_DIR/assets" fresh_app/
+          fi
+
       - name: Get dependencies
-        working-directory: ${{ env.PROJECT_DIR }}
+        working-directory: fresh_app
         run: flutter pub get
 
       - name: Build APK
-        working-directory: ${{ env.PROJECT_DIR }}
+        working-directory: fresh_app
         run: flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: terebar-online-apk
-          path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk
+          path: fresh_app/build/app/outputs/flutter-apk/app-release.apk

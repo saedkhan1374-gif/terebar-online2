@@ -17,58 +17,56 @@ jobs:
           flutter-version: '3.35.0'
           channel: stable
 
-      - name: Extract original project
+      - name: Extract ZIP
         run: |
           unzip -q terebar_online_complete_flutter.zip
-          mkdir -p original
-          cp -r terebar_online_full/lib original/
-          cp -r terebar_online_full/assets original/
 
       - name: Create clean Flutter project
         run: |
           flutter create --platforms=android \
             --org com.terebaronline \
-            --project-name terebar_online fresh_app
+            --project-name terebar_online \
+            fresh_app
 
-      - name: Copy application code
+      - name: Copy app code
         run: |
           rm -rf fresh_app/lib
-          cp -r original/lib fresh_app/lib
+          cp -r terebar_online_full/lib fresh_app/lib
 
-          rm -rf fresh_app/assets
-          cp -r original/assets fresh_app/assets
+          if [ -d terebar_online_full/assets ]; then
+            cp -r terebar_online_full/assets fresh_app/assets
+          fi
 
-      - name: Update pubspec
+      - name: Add assets to pubspec
+        working-directory: fresh_app
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          p = Path("fresh_app/pubspec.yaml")
+          p = Path("pubspec.yaml")
           s = p.read_text()
 
           s = s.replace(
-              "cupertino_icons: ^1.6.0",
-              "cupertino_icons: ^1.0.8"
+              "  cupertino_icons: ^1.0.8",
+              ""
           )
 
-          marker = "  cupertino_icons: ^1.0.8"
-          if marker not in s:
-              s = s.replace(
-                  "  flutter:\n    sdk: flutter",
-                  "  flutter:\n    sdk: flutter\n\n  cupertino_icons: ^1.0.8"
-              )
-
-          if "  assets:" not in s:
-              s += "\nflutter:\n  uses-material-design: true\n  assets:\n    - assets/\n"
+          if "assets:" not in s:
+              s += """
+          flutter:
+            uses-material-design: true
+            assets:
+              - assets/
+          """
 
           p.write_text(s)
           PY
 
-      - name: Get dependencies
+      - name: Get packages
         working-directory: fresh_app
         run: flutter pub get
 
-      - name: Build release APK
+      - name: Build APK
         working-directory: fresh_app
         run: flutter build apk --release
 

@@ -11,37 +11,64 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract project
-        run: |
-          unzip -q terebar_online_complete_flutter.zip
-          PROJECT_DIR=$(find . -name pubspec.yaml -not -path './.github/*' -printf '%h\n' | head -n 1)
-          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
-          echo "Project: $PROJECT_DIR"
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.35.0'
           channel: stable
-          cache: true
 
-      - name: Create fresh Flutter project
+      - name: Extract original project
         run: |
-          flutter create --platforms=android fresh_app
+          unzip -q terebar_online_complete_flutter.zip
+          mkdir -p original
+          cp -r terebar_online_full/lib original/
+          cp -r terebar_online_full/assets original/
 
-      - name: Copy app files
+      - name: Create clean Flutter project
         run: |
-          cp -r "$PROJECT_DIR/lib" fresh_app/
-          cp "$PROJECT_DIR/pubspec.yaml" fresh_app/
-          if [ -d "$PROJECT_DIR/assets" ]; then
-            cp -r "$PROJECT_DIR/assets" fresh_app/
-          fi
+          flutter create --platforms=android \
+            --org com.terebaronline \
+            --project-name terebar_online fresh_app
+
+      - name: Copy application code
+        run: |
+          rm -rf fresh_app/lib
+          cp -r original/lib fresh_app/lib
+
+          rm -rf fresh_app/assets
+          cp -r original/assets fresh_app/assets
+
+      - name: Update pubspec
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("fresh_app/pubspec.yaml")
+          s = p.read_text()
+
+          s = s.replace(
+              "cupertino_icons: ^1.6.0",
+              "cupertino_icons: ^1.0.8"
+          )
+
+          marker = "  cupertino_icons: ^1.0.8"
+          if marker not in s:
+              s = s.replace(
+                  "  flutter:\n    sdk: flutter",
+                  "  flutter:\n    sdk: flutter\n\n  cupertino_icons: ^1.0.8"
+              )
+
+          if "  assets:" not in s:
+              s += "\nflutter:\n  uses-material-design: true\n  assets:\n    - assets/\n"
+
+          p.write_text(s)
+          PY
 
       - name: Get dependencies
         working-directory: fresh_app
         run: flutter pub get
 
-      - name: Build APK
+      - name: Build release APK
         working-directory: fresh_app
         run: flutter build apk --release
 

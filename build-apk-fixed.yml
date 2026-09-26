@@ -1,0 +1,72 @@
+name: Build Flutter APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.0'
+          channel: stable
+          cache: true
+
+      - name: Find Flutter source project
+        shell: bash
+        run: |
+          set -e
+          SOURCE_DIR=""
+
+          if [ -f "pubspec.yaml" ] && [ -d "lib" ]; then
+            SOURCE_DIR="."
+          else
+            SOURCE_DIR=$(find . -type f -name pubspec.yaml -not -path './fresh_app/*' -print | head -n 1 | xargs -r dirname)
+          fi
+
+          if [ -z "$SOURCE_DIR" ] || [ ! -d "$SOURCE_DIR/lib" ]; then
+            echo "Could not find the Flutter source project (pubspec.yaml + lib)."
+            find . -maxdepth 4 -type f -name pubspec.yaml -print
+            exit 1
+          fi
+
+          echo "SOURCE_DIR=$SOURCE_DIR" >> "$GITHUB_ENV"
+          echo "Using Flutter source: $SOURCE_DIR"
+
+      - name: Create standard Flutter Android project
+        shell: bash
+        run: |
+          set -e
+
+          rm -rf fresh_app
+          flutter create --platforms=android             --org com.terebaronline             --project-name terebar_online             fresh_app
+
+          rm -rf fresh_app/lib
+          cp -r "$SOURCE_DIR/lib" fresh_app/lib
+
+          if [ -d "$SOURCE_DIR/assets" ]; then
+            rm -rf fresh_app/assets
+            cp -r "$SOURCE_DIR/assets" fresh_app/assets
+          fi
+
+          cp "$SOURCE_DIR/pubspec.yaml" fresh_app/pubspec.yaml
+
+      - name: Get dependencies
+        working-directory: fresh_app
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: fresh_app
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: fresh_app/build/app/outputs/flutter-apk/app-release.apk

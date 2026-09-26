@@ -1,0 +1,51 @@
+name: Build Flutter APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.0'
+          channel: stable
+          cache: true
+
+      - name: Create standard Flutter Android project
+        run: |
+          set -e
+          flutter create --platforms=android \
+            --org com.terebaronline \
+            --project-name terebar_online \
+            fresh_app
+
+          rm -rf fresh_app/lib
+          cp -r lib fresh_app/lib
+
+          if [ -d assets ]; then
+            rm -rf fresh_app/assets
+            cp -r assets fresh_app/assets
+          fi
+
+          cp pubspec.yaml fresh_app/pubspec.yaml
+
+      - name: Get dependencies
+        working-directory: fresh_app
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: fresh_app
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: fresh_app/build/app/outputs/flutter-apk/app-release.apk

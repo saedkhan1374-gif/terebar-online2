@@ -18,42 +18,42 @@ jobs:
           channel: stable
           cache: true
 
-      -       - name: Extract Flutter source ZIP
-        shell: bash
+      - name: Find ZIP
         run: |
           set -e
+          echo "Searching for ZIP..."
+          find . -type f -iname "*.zip" -print
 
-          echo "Files in repository:"
-          find . -maxdepth 4 -type f -print
-
-          ZIP_FILE=$(find . -type f -iname '*.zip' | head -n 1)
+          ZIP_FILE=$(find . -type f -iname "*.zip" -print -quit)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: No ZIP file found in repository."
+            echo "ERROR: ZIP file not found"
             exit 1
           fi
 
-          echo "ZIP FOUND: $ZIP_FILE"
+          echo "Found: $ZIP_FILE"
+          echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
+
+      - name: Extract ZIP
+        run: |
+          set -e
 
           rm -rf /tmp/flutter_source
           mkdir -p /tmp/flutter_source
 
           unzip -q "$ZIP_FILE" -d /tmp/flutter_source
 
-          echo "ZIP extracted successfully."
-
-          echo "Searching for pubspec.yaml:"
+          echo "ZIP extracted"
           find /tmp/flutter_source -type f -name "pubspec.yaml" -print
 
       - name: Find Flutter project
-        shell: bash
         run: |
           set -e
 
           SOURCE_DIR=""
 
-          while IFS= read -r pubspec; do
-            DIR=$(dirname "$pubspec")
+          while IFS= read -r PUBSPEC; do
+            DIR=$(dirname "$PUBSPEC")
 
             if [ -d "$DIR/lib" ]; then
               SOURCE_DIR="$DIR"
@@ -62,19 +62,17 @@ jobs:
           done < <(find /tmp/flutter_source -type f -name "pubspec.yaml")
 
           if [ -z "$SOURCE_DIR" ]; then
-            echo "ERROR: Flutter project not found."
-            echo "Contents of extracted ZIP:"
-            find /tmp/flutter_source -maxdepth 5 -type f | head -200
+            echo "ERROR: Flutter project not found"
+            find /tmp/flutter_source -maxdepth 6 -type f -print
             exit 1
           fi
 
-          echo "Flutter source found at:"
+          echo "Flutter project found:"
           echo "$SOURCE_DIR"
 
           echo "SOURCE_DIR=$SOURCE_DIR" >> "$GITHUB_ENV"
 
-      - name: Create clean Flutter Android project
-        shell: bash
+      - name: Create clean Flutter project
         run: |
           set -e
 
@@ -86,32 +84,26 @@ jobs:
             --project-name terebar_online \
             fresh_app
 
-          echo "Copying application source..."
-
           rm -rf fresh_app/lib
           cp -r "$SOURCE_DIR/lib" fresh_app/lib
 
           if [ -d "$SOURCE_DIR/assets" ]; then
-            rm -rf fresh_app/assets
             cp -r "$SOURCE_DIR/assets" fresh_app/assets
           fi
 
           cp "$SOURCE_DIR/pubspec.yaml" fresh_app/pubspec.yaml
 
-          echo "Source copied successfully."
-
       - name: Get dependencies
         working-directory: fresh_app
-        run: |
-          flutter pub get
+        run: flutter pub get
 
       - name: Build APK
         working-directory: fresh_app
-        run: |
-          flutter build apk --release
+        run: flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release
           path: fresh_app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error

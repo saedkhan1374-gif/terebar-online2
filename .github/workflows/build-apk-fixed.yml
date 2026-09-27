@@ -18,27 +18,31 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Extract Flutter source ZIP
+      -       - name: Extract Flutter source ZIP
         shell: bash
         run: |
           set -e
 
-          ZIP_FILE=$(find . -type f -name 'terebar_online_complete_flutter.zip' | head -n 1)
+          echo "Files in repository:"
+          find . -maxdepth 4 -type f -print
+
+          ZIP_FILE=$(find . -type f -iname '*.zip' | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: Flutter ZIP file not found."
+            echo "ERROR: No ZIP file found in repository."
             exit 1
           fi
 
-          echo "Found ZIP: $ZIP_FILE"
+          echo "ZIP FOUND: $ZIP_FILE"
 
           rm -rf /tmp/flutter_source
           mkdir -p /tmp/flutter_source
 
           unzip -q "$ZIP_FILE" -d /tmp/flutter_source
 
-          echo "Searching for Flutter project..."
+          echo "ZIP extracted successfully."
 
+          echo "Searching for pubspec.yaml:"
           find /tmp/flutter_source -type f -name "pubspec.yaml" -print
 
       - name: Find Flutter project

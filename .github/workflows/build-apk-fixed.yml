@@ -18,34 +18,71 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Find Flutter source project
+      - name: Extract Flutter source ZIP
         shell: bash
         run: |
           set -e
-          SOURCE_DIR=""
 
-          if [ -f "pubspec.yaml" ] && [ -d "lib" ]; then
-            SOURCE_DIR="."
-          else
-            SOURCE_DIR=$(find . -type f -name pubspec.yaml -not -path './fresh_app/*' -print | head -n 1 | xargs -r dirname)
-          fi
+          ZIP_FILE=$(find . -type f -name 'terebar_online_complete_flutter.zip' | head -n 1)
 
-          if [ -z "$SOURCE_DIR" ] || [ ! -d "$SOURCE_DIR/lib" ]; then
-            echo "Could not find the Flutter source project (pubspec.yaml + lib)."
-            find . -maxdepth 4 -type f -name pubspec.yaml -print
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: Flutter ZIP file not found."
             exit 1
           fi
 
-          echo "SOURCE_DIR=$SOURCE_DIR" >> "$GITHUB_ENV"
-          echo "Using Flutter source: $SOURCE_DIR"
+          echo "Found ZIP: $ZIP_FILE"
 
-      - name: Create standard Flutter Android project
+          rm -rf /tmp/flutter_source
+          mkdir -p /tmp/flutter_source
+
+          unzip -q "$ZIP_FILE" -d /tmp/flutter_source
+
+          echo "Searching for Flutter project..."
+
+          find /tmp/flutter_source -type f -name "pubspec.yaml" -print
+
+      - name: Find Flutter project
+        shell: bash
+        run: |
+          set -e
+
+          SOURCE_DIR=""
+
+          while IFS= read -r pubspec; do
+            DIR=$(dirname "$pubspec")
+
+            if [ -d "$DIR/lib" ]; then
+              SOURCE_DIR="$DIR"
+              break
+            fi
+          done < <(find /tmp/flutter_source -type f -name "pubspec.yaml")
+
+          if [ -z "$SOURCE_DIR" ]; then
+            echo "ERROR: Flutter project not found."
+            echo "Contents of extracted ZIP:"
+            find /tmp/flutter_source -maxdepth 5 -type f | head -200
+            exit 1
+          fi
+
+          echo "Flutter source found at:"
+          echo "$SOURCE_DIR"
+
+          echo "SOURCE_DIR=$SOURCE_DIR" >> "$GITHUB_ENV"
+
+      - name: Create clean Flutter Android project
         shell: bash
         run: |
           set -e
 
           rm -rf fresh_app
-          flutter create --platforms=android             --org com.terebaronline             --project-name terebar_online             fresh_app
+
+          flutter create \
+            --platforms=android \
+            --org com.terebaronline \
+            --project-name terebar_online \
+            fresh_app
+
+          echo "Copying application source..."
 
           rm -rf fresh_app/lib
           cp -r "$SOURCE_DIR/lib" fresh_app/lib
@@ -57,13 +94,17 @@ jobs:
 
           cp "$SOURCE_DIR/pubspec.yaml" fresh_app/pubspec.yaml
 
+          echo "Source copied successfully."
+
       - name: Get dependencies
         working-directory: fresh_app
-        run: flutter pub get
+        run: |
+          flutter pub get
 
       - name: Build APK
         working-directory: fresh_app
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
